@@ -3,27 +3,40 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Przelicznik Paliw</title>
+  <title>Przelicznik Hurtowych Cen Paliw</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <main>
-    <h1>Przelicznik Paliw ⛽</h1>
-    <section id="prices">
-      <div class="row">PB95: <span id="pb95">—</span> zł</div>
-      <div class="row">PB98: <span id="pb98">—</span> zł</div>
-      <div class="row">Diesel: <span id="diesel">—</span> zł</div>
-      <div class="row">LPG: <span id="lpg">—</span> zł</div>
-      <div class="row small" id="meta">Ładowanie…</div>
+    <h1>Hurtowe ceny paliw — brutto za 1 L ⛽</h1>
+
+    <section id="widget">
+      <div class="row">
+        <div class="label">Benzyna (95)</div>
+        <div class="value"><span id="benzyna">—</span> zł</div>
+      </div>
+      <div class="row">
+        <div class="label">ON (diesel)</div>
+        <div class="value"><span id="on">—</span> zł</div>
+      </div>
+      <div class="row">
+        <div class="label">OP (olej opałowy)</div>
+        <div class="value"><span id="op">—</span> zł</div>
+      </div>
+
+      <div class="controls">
+        <label>Marża (grosze): <input id="margin" type="number" step="1" value="0" /></label>
+        <button id="saveMargin">Zapisz marżę</button>
+        <div class="small" id="meta">Ładowanie…</div>
+      </div>
     </section>
 
-    <section style="margin-top:16px">
-      <h2 style="font-size:14px;margin:0 0 8px">Historia PB95 (ostatnie)</h2>
-      <div id="chart" style="background:#fff;border-radius:8px;padding:10px;box-shadow:0 2px 8px rgba(10,20,40,.04)"></div>
+    <section id="chartWrap">
+      <h2>Historia benzyny (brutto / L)</h2>
+      <div id="chart"></div>
     </section>
   </main>
 
   <script src="script.js"></script>
 </body>
 </html>
-
