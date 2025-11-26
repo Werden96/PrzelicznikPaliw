@@ -12,7 +12,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          persist-credentials: true
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Setup Node 18
         uses: actions/setup-node@v4
@@ -22,12 +22,22 @@ jobs:
       - name: Run scraper (no dependencies)
         id: run_scraper
         run: |
-          set -e
+          set -euo pipefail
+          echo "Node version:"
           node -v
+          echo "Working directory:"
+          pwd
+          echo "Listing files:"
+          ls -la
+          echo "Running scraper..."
           node fetch_and_parse.js
 
-      - name: Show git status
-        run: git status --porcelain || true
+      - name: Show git status (debug)
+        run: |
+          echo "---- git status ----"
+          git status --porcelain || true
+          echo "---- git diff ----"
+          git --no-pager diff || true
 
       - name: Check for changes
         id: check_changes
@@ -42,14 +52,13 @@ jobs:
         if: steps.check_changes.outputs.changed == 'true'
         uses: EndBug/add-and-commit@v9
         with:
-         author_name: 'github-actions[bot]'
-         author_email: '41898282+github-actions[bot]@users.noreply.github.com'
-         message: 'Update prices.json & history'
-         add: |
-          prices.json
-          history.json
-          history/**
-
+          author_name: 'github-actions[bot]'
+          author_email: '41898282+github-actions[bot]@users.noreply.github.com'
+          message: 'Update prices.json & history'
+          add: |
+            prices.json
+            history.json
+            history/**
 
       - name: No changes message
         if: steps.check_changes.outputs.changed == 'false'
