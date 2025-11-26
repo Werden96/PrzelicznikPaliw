@@ -5,35 +5,69 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Przelicznik Hurtowych Cen Paliw</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    /* small inline tweaks to ensure widget mobile-friendly */
+    body{font-family:Inter,system-ui,Arial,sans-serif;background:#f7f9fc;margin:0;padding:12px;display:flex;align-items:center;justify-content:center}
+    main{width:100%;max-width:720px;background:#fff;padding:18px;border-radius:10px;box-shadow:0 6px 20px rgba(10,20,40,0.06)}
+    h1{font-size:18px;margin:0 0 12px}
+    .fuel{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:8px;background:#fbfbfd;margin-bottom:8px}
+    .label{font-weight:600}
+    .value{font-size:18px}
+    .controls{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+    .controls input[type="number"]{width:90px;padding:6px;border-radius:6px;border:1px solid #ddd}
+    .controls button{padding:6px 10px;border-radius:6px;border:0;background:#0b69ff;color:#fff}
+    .small{color:#666;font-size:13px;margin-top:8px}
+    #chart{margin-top:14px}
+    @media(max-width:420px){ .controls{flex-direction:column;align-items:flex-start} }
+  </style>
 </head>
 <body>
   <main>
     <h1>Hurtowe ceny paliw — brutto za 1 L ⛽</h1>
 
     <section id="widget">
-      <div class="row">
-        <div class="label">Benzyna (95)</div>
-        <div class="value"><span id="benzyna">—</span> zł</div>
-      </div>
-      <div class="row">
-        <div class="label">ON (diesel)</div>
-        <div class="value"><span id="on">—</span> zł</div>
-      </div>
-      <div class="row">
-        <div class="label">OP (olej opałowy)</div>
-        <div class="value"><span id="op">—</span> zł</div>
+      <div id="fuel-benzyna" class="fuel">
+        <div>
+          <div class="label">Benzyna (95)</div>
+          <div class="small">Cena brutto / L: <span id="benzyna">—</span> zł</div>
+        </div>
+        <div class="controls">
+          <label>Marża (grosze): <input id="margin-benzyna" type="number" step="1" value="0" /></label>
+          <button id="save-benzyna">Zapisz</button>
+          <button id="reset-benzyna">Reset</button>
+        </div>
       </div>
 
-      <div class="controls">
-        <label>Marża (grosze): <input id="margin" type="number" step="1" value="0" /></label>
-        <button id="saveMargin">Zapisz marżę</button>
-        <div class="small" id="meta">Ładowanie…</div>
+      <div id="fuel-on" class="fuel">
+        <div>
+          <div class="label">ON (diesel)</div>
+          <div class="small">Cena brutto / L: <span id="on">—</span> zł</div>
+        </div>
+        <div class="controls">
+          <label>Marża (grosze): <input id="margin-on" type="number" step="1" value="0" /></label>
+          <button id="save-on">Zapisz</button>
+          <button id="reset-on">Reset</button>
+        </div>
       </div>
+
+      <div id="fuel-op" class="fuel">
+        <div>
+          <div class="label">OP (olej opałowy)</div>
+          <div class="small">Cena brutto / L: <span id="op">—</span> zł</div>
+        </div>
+        <div class="controls">
+          <label>Marża (grosze): <input id="margin-op" type="number" step="1" value="0" /></label>
+          <button id="save-op">Zapisz</button>
+          <button id="reset-op">Reset</button>
+        </div>
+      </div>
+
+      <div class="small" id="meta">Ładowanie…</div>
     </section>
 
     <section id="chartWrap">
-      <h2>Historia benzyny (brutto / L)</h2>
-      <div id="chart"></div>
+      <h2 style="font-size:14px;margin:12px 0 6px">Historia benzyny (brutto / L)</h2>
+      <div id="chart">Ładowanie wykresu…</div>
     </section>
   </main>
 
