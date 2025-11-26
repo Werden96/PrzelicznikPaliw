@@ -1,4 +1,5 @@
-const fetch = require('node-fetch');
+// use built-in fetch in Node 18+ (GitHub Actions uses Node 18)
+const fetch = globalThis.fetch;
 const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
