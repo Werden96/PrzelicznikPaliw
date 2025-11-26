@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Przelicznik Paliw</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main>
+    <h1>Przelicznik Paliw ⛽</h1>
+    <section id="prices">
+      <div class="row">PB95: <span id="pb95">—</span> zł</div>
+      <div class="row">PB98: <span id="pb98">—</span> zł</div>
+      <div class="row">Diesel: <span id="diesel">—</span> zł</div>
+      <div class="row">LPG: <span id="lpg">—</span> zł</div>
+      <div class="row small" id="meta">Ładowanie…</div>
+    </section>
+
+    <section style="margin-top:16px">
+      <h2 style="font-size:14px;margin:0 0 8px">Historia PB95 (ostatnie)</h2>
+      <div id="chart" style="background:#fff;border-radius:8px;padding:10px;box-shadow:0 2px 8px rgba(10,20,40,.04)"></div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
