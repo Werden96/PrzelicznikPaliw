@@ -1,4 +1,4 @@
-// fetch_and_parse.js - improved price extraction (handles split cells like ["4","80"])
+// fetch_and_parse.js - improved parsing for "4 448,00" format and PLN/1000L -> divide by 1000
 const fs = require('fs');
 const path = require('path');
 
@@ -49,70 +49,81 @@ function parseTableRows(tableHtml) {
   return rows;
 }
 
+// Clean a cell string and try to extract a numeric value.
+// Handles "4 448,00", "4448,00", "4.448,00", "4,448.00", etc.
+// Returns float or null.
+function parseNumericFromCell(cell) {
+  if (!cell || typeof cell !== 'string') return null;
+  // remove non digit, comma, dot, and space characters
+  let cleaned = cell.replace(/[^\d,.\s]/g, '').trim();
+  if (!cleaned) return null;
+  // remove spaces that are thousands separators: "4 448,00" -> "4448,00"
+  cleaned = cleaned.replace(/\s+/g, '');
+  // replace comma with dot for decimal
+  cleaned = cleaned.replace(/,/g, '.');
+  // now parse
+  const n = parseFloat(cleaned);
+  if (isNaN(n)) return null;
+  // Heuristic: if value looks like price-per-1000L (>=1000), convert to per liter:
+  // e.g. 4448 -> 4.448
+  if (Math.abs(n) >= 1000) return n / 1000.0;
+  // if extremely large (>=100), consider dividing by 100 or 1000? we avoid guessing here.
+  return n;
+}
+
 // Return array of numeric tokens found in a row cell (strings like "4,80", "4", "80", "4.80", "480")
 function findNumericTokensInRow(r) {
   const tokens = [];
   for (const cell of r) {
-    // remove currency words, keep digits, comma and dot and spaces
-    const cleaned = cell.replace(/[^\d,. ]+/g, ' ').trim();
+    const cleaned = String(cell).replace(/[^\d,. ]+/g, ' ').trim();
     if (!cleaned) continue;
-    // split on spaces because some cells have "4 80" etc.
     for (const part of cleaned.split(/\s+/)) {
       if (!part) continue;
-      // keep if contains digit
       if (/[0-9]/.test(part)) tokens.push(part);
     }
   }
   return tokens;
 }
 
-// Try to extract a float price from row r
 function extractPriceFromRow(r) {
-  // 1) try to find a token with decimal (xx,yy or xx.yy)
+  // 1) Try to parse any individual cell directly (handles "4 448,00")
   for (const cell of r) {
-    const m = cell.match(/(\d{1,2}[.,]\d{1,3})/);
-    if (m) {
-      const raw = m[1].replace(',', '.');
-      const p = parseFloat(raw);
-      if (!isNaN(p)) return p;
-    }
+    const tryNum = parseNumericFromCell(cell);
+    if (tryNum !== null) return tryNum;
   }
 
-  // 2) try fallback: if there is a single token like "480" assume it's cents -> 4.80 if length 3/2 heuristic
+  // 2) Fallback: tokens logic (split across cells)
   const tokens = findNumericTokensInRow(r);
+  if (tokens.length === 0) return null;
+
+  // If single token like "480" -> try heuristics
   if (tokens.length === 1) {
     const t = tokens[0].replace(',', '.');
-    // if t has no dot/comma but length 3, interpret as 4.80 (480 -> 4.80)
     if (!t.includes('.') && t.length === 3) {
-      const p = parseFloat(t) / 100.0;
+      const p = parseFloat(t) / 100.0; // 480 -> 4.80
       if (!isNaN(p)) return p;
     }
-    // if it's like "48" maybe 4.8? ambiguous — try divide by 10 if >=10 and <=200
     if (!t.includes('.') && t.length === 2) {
-      // heuristic: 48 -> 4.8 if <= 99
       const n = parseInt(t, 10);
-      if (!isNaN(n) && n <= 99) return n / 10.0;
+      if (!isNaN(n) && n <= 99) return n / 10.0; // 48 -> 4.8 heuristic (kept for legacy)
     }
-    // lastly try direct parse
-    const p2 = parseFloat(t);
-    if (!isNaN(p2)) return p2;
+    const direct = parseFloat(t);
+    if (!isNaN(direct)) return direct;
   }
 
-  // 3) if multiple numeric tokens, try to combine adjacent that look like integer + fractional (e.g. ["4","80"])
-  for (let i = 0; i < tokens.length - 1; i++) {
-    const a = tokens[i].replace(',', '.');
-    const b = tokens[i+1].replace(',', '.');
-    // a integer, b exactly two digits -> combine
-    if (/^\d{1,2}$/.test(a) && /^\d{2}$/.test(b)) {
-      const combined = `${a}.${b}`;
-      const p = parseFloat(combined);
-      if (!isNaN(p)) return p;
+  // 3) If multiple tokens, try combine adjacent like "4" + "448,00"
+  for (let i = 0; i < tokens.length; i++) {
+    // try combine tokens from i up to i+2
+    let comb = '';
+    for (let j = i; j < Math.min(tokens.length, i + 3); j++) {
+      comb += tokens[j];
     }
-    // if a has 1-2 digits ending with dot/comma missing, combine
-    if (/^\d{1,2}$/.test(a) && /^\d{1,3}$/.test(b)) {
-      const combined = `${a}.${b}`;
-      const p = parseFloat(combined);
-      if (!isNaN(p)) return p;
+    // clean combined and try parse
+    const cleaned = comb.replace(/\s+/g, '').replace(/,/g, '.');
+    const val = parseFloat(cleaned);
+    if (!isNaN(val)) {
+      if (Math.abs(val) >= 1000) return val / 1000.0;
+      return val;
     }
   }
 
@@ -126,8 +137,8 @@ function rowsToPrices(rows) {
     const joined = r.join(' ').toLowerCase();
     const price = extractPriceFromRow(r);
 
-    // debug log small tokens
-    // console.log('ROW TOKENS:', r, '=> price candidate=', price);
+    // debugging: log tokens when price is found
+    // console.log('DEBUG ROW:', r, '=> price', price);
 
     if (/95|pb95|benzyna 95|benzyna95/.test(joined) && price !== null) {
       result.pb95 = price;
@@ -138,7 +149,8 @@ function rowsToPrices(rows) {
       continue;
     }
     if (/diesel|olej nap[ęe]dowy|on|olej-napędowy/.test(joined) && price !== null) {
-      result.diesel = price;
+      // prefer first diesel-like for diesel
+      if (result.diesel === null) result.diesel = price;
       continue;
     }
     if (/lpg|autogaz/.test(joined) && price !== null) {
@@ -146,7 +158,7 @@ function rowsToPrices(rows) {
       continue;
     }
 
-    // fallback: if first cell contains name like "PB95" or "95" etc.
+    // fallback: if first cell contains name like "PB95" etc.
     if (r.length >= 2 && price !== null) {
       const name = r[0].toLowerCase();
       if (/95/.test(name) && result.pb95 === null) result.pb95 = price;
@@ -192,7 +204,6 @@ async function fetchHtml(url) {
     }
 
     console.log('Tabela znaleziono - parsuję wiersze (fragment):');
-    // console.log(tableHtml.slice(0,1200));
     const rows = parseTableRows(tableHtml);
     console.log('Liczba wierszy:', rows.length);
     for (let i=0;i<Math.min(12, rows.length); i++) {
