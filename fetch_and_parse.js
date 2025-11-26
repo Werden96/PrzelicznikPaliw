@@ -1,9 +1,8 @@
-// fetch_and_parse.js - final: extract raw (PLN/1000L), per_liter, gross (= per_liter*1.23)
-// maps rows to keys: benzyna, on, op
+// fetch_and_parse.js - zapisuje dokładne nazwy paliw z tabeli jako klucze w prices.json
 const fs = require('fs');
 const path = require('path');
 
-const SOURCE_URL = 'https://spot.lotosspv1.pl/2/hurtowe_ceny_paliw'; // używamy źródła, z którego pracowaliśmy
+const SOURCE_URL = 'https://spot.lotosspv1.pl/2/hurtowe_ceny_paliw';
 const PRICES_FILE = 'prices.json';
 const HISTORY_FILE = 'history.json';
 const HISTORY_DIR = 'history';
@@ -18,7 +17,6 @@ function extractTableHtml(html){
   const m = html.match(/<table[\s\S]*?<\/table>/i);
   return m ? m[0] : null;
 }
-
 function parseTableRows(tableHtml){
   const rows = [];
   const trRe = /<tr[\s\S]*?<\/tr>/gi;
@@ -40,39 +38,30 @@ function parseTableRows(tableHtml){
 
 function parseNumericFromCell(cell){
   if(!cell) return null;
-  let cleaned = String(cell).replace(/[^\d,.\s]/g,'').trim();
+  let cleaned = String(cell).replace(/[^\d,.\s]/g,'').trim(); // keep digits, dot, comma, space
   if(!cleaned) return null;
-  cleaned = cleaned.replace(/\s+/g,'').replace(/,/g,'.');
+  cleaned = cleaned.replace(/\s+/g,'').replace(/,/g,'.'); // "4 448,00" -> "4448.00"
   const n = parseFloat(cleaned);
   return isNaN(n) ? null : n;
 }
 
+// Build mapping: key = original name string, value = { raw: number (PLN / 1000L), per_liter, gross }
 function rowsToPrices(rows){
-  // returns object { benzyna: {raw, per_liter, gross}, on:..., op:... }
   const out = {};
   for(const r of rows){
+    // we expect at least two columns: [name, price]
     if(r.length < 2) continue;
-    const name = r[0].toLowerCase();
-    const rawVal = parseNumericFromCell(r[1]); // e.g. 4448.00
-    if(rawVal === null) continue;
-
-    // map row -> key
-    let key = null;
-    if(name.includes('95') || name.includes('benzyna')) key = 'benzyna';
-    else if(name.includes('napędowy') || name.includes('eurodiesel') || name.includes('diesel') || name.includes('on')) {
-      // prefer normal diesel as 'on'; keep OP (olej opałowy) separate below when name contains 'opał' or 'do celów opałowych'
-      if(name.includes('opał') || name.includes('op') || name.includes('opal')) key = 'op';
-      else key = 'on';
-    } else if(name.includes('opal') || name.includes('opał')) key = 'op';
-    else if(name.includes('lpg')||name.includes('autogaz')) key = 'lpg';
-
-    if(!key) continue;
-
-    const rawRounded = Math.round(rawVal * 100) / 100; // keep two decimals if any
+    const name = r[0].trim();
+    const rawVal = parseNumericFromCell(r[1]);
+    if(rawVal === null) {
+      // if price cell empty or unparsable, skip but keep key with null values
+      out[name] = { raw: null, per_liter: null, gross: null };
+      continue;
+    }
+    const rawRounded = Math.round(rawVal * 100) / 100; // keep 2 decimals
     const per_liter = rawRounded / 1000.0;
-    const gross = Math.round(per_liter * VAT * 100000) / 100000; // keep 5 decimals for safety
-
-    out[key] = { raw: rawRounded, per_liter: per_liter, gross: gross };
+    const gross = Math.round(per_liter * VAT * 100000) / 100000; // 5 decimals
+    out[name] = { raw: rawRounded, per_liter: per_liter, gross: gross };
   }
   return out;
 }
@@ -91,14 +80,14 @@ async function fetchHtml(url){
 
     const tableHtml = extractTableHtml(html);
     if(!tableHtml){
-      throw new Error('Nie znaleziono tabeli w HTML (strona mogła zmienić strukturę).');
+      throw new Error('Nie znaleziono tabeli w HTML (tabela mogła być zmieniona lub generowana JS).');
     }
 
     const rows = parseTableRows(tableHtml);
     console.log('Znaleziono wierszy:', rows.length);
 
     const scraped = rowsToPrices(rows);
-    console.log('Scraped:', scraped);
+    console.log('Scraped entries:', Object.keys(scraped).length);
 
     // read old
     let old = null;
@@ -106,20 +95,20 @@ async function fetchHtml(url){
       try{ old = JSON.parse(fs.readFileSync(PRICES_FILE,'utf8')); } catch(e){ old = null; }
     }
 
-    // Build final object merging old keys to keep stable shape
-    const keys = new Set([...Object.keys(scraped), ...(old && old.prices ? Object.keys(old.prices) : [])]);
+    // Build final: keep any old keys too, but prefer scraped values for keys that exist
+    const keys = new Set([...(old && old.prices ? Object.keys(old.prices) : []), ...Object.keys(scraped)]);
     const final = {};
     for(const k of keys){
-      if(scraped[k]) final[k] = scraped[k];
+      if(scraped.hasOwnProperty(k)) final[k] = scraped[k];
       else if(old && old.prices && old.prices[k]) final[k] = old.prices[k];
       else final[k] = { raw: null, per_liter: null, gross: null };
     }
 
     const payload = { source: SOURCE_URL, fetched_at: new Date().toISOString(), prices: final };
 
-    // compare by gross values
+    // compare by gross per key
     function pricesEqual(a={}, b={}){
-      const ks = new Set([...Object.keys(a), ...Object.keys(b)]);
+      const ks = new Set([...Object.keys(a||{}), ...Object.keys(b||{})]);
       for(const k of ks){
         const ga = a[k] && typeof a[k].gross === 'number' ? a[k].gross : null;
         const gb = b[k] && typeof b[k].gross === 'number' ? b[k].gross : null;
@@ -145,7 +134,7 @@ async function fetchHtml(url){
 
     let history = [];
     if(fs.existsSync(HISTORY_FILE)){
-      try{ history = JSON.parse(fs.readFileSync(HISTORY_FILE,'utf8'))||[]; } catch(e){ history = []; }
+      try{ history = JSON.parse(fs.readFileSync(HISTORY_FILE,'utf8')) || []; } catch(e){ history = []; }
     }
     history.push(payload);
     if(history.length > MAX_HISTORY_ENTRIES) history = history.slice(history.length - MAX_HISTORY_ENTRIES);
