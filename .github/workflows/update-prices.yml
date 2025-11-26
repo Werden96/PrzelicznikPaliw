@@ -2,7 +2,7 @@ name: Update Lotos Prices
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # co 30 minut
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -14,18 +14,13 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Setup Node.js
+      - name: Setup Node.js 18
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Install dependencies (ci or install)
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-audit --no-fund
-          fi
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
 
       - name: Run scraper
         id: run_scraper
@@ -33,7 +28,7 @@ jobs:
           set -e
           node fetch_and_parse.js
 
-      - name: Show git status (debug)
+      - name: Show git status
         run: git status --porcelain || true
 
       - name: Check for changes
