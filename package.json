@@ -1,12 +1,11 @@
 {
-  "name": "lotos-price-scraper",
+  "name": "lotos-scraper",
   "version": "1.0.0",
-  "description": "Scrape Lotos wholesale prices and produce prices.json",
+  "description": "Minimal scraper Lotos prices (no dependencies)",
   "main": "fetch_and_parse.js",
   "scripts": {
     "start": "node fetch_and_parse.js"
   },
-  "dependencies": {
-    "cheerio": "^1.0.0-rc.12"
-  }
+  "author": "Werden",
+  "license": "MIT"
 }
