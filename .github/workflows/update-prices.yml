@@ -1,0 +1,59 @@
+name: Update Lotos Prices
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # co 30 minut
+  workflow_dispatch:
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies (ci or install)
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Run scraper
+        id: run_scraper
+        run: |
+          set -e
+          node fetch_and_parse.js
+
+      - name: Show git status (debug)
+        run: git status --porcelain || true
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit updated files (only if changes)
+        if: steps.check_changes.outputs.changed == 'true'
+        uses: EndBug/add-and-commit@v9
+        with:
+          author_name: 'github-actions[bot]'
+          author_email: '41898282+github-actions[bot]@users.noreply.github.com'
+          message: 'Update prices.json & history'
+          add: 'prices.json, history.json, history/**'
+
+      - name: No changes message
+        if: steps.check_changes.outputs.changed == 'false'
+        run: echo "Brak zmian w cenach — commit pominięty."
