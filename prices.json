@@ -1,0 +1,10 @@
+{
+  "source": "https://spot.lotosspv1.pl/2/hurtowe_ceny_paliw",
+  "fetched_at": "2025-11-26T22:29:13.001Z",
+  "prices": {
+    "pb95": 48,
+    "pb98": 16,
+    "diesel": 41,
+    "lpg": null
+  }
+}
