@@ -1,5 +1,4 @@
-// use built-in fetch in Node 18+ (GitHub Actions uses Node 18)
-const fetch = globalThis.fetch;
+// fetch_and_parse.js
 const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
@@ -15,13 +14,11 @@ function ensureDir(dir) {
 }
 
 function parseTableRowsToPrices(rows) {
-  // rows: array of arrays (komórki tekst)
-  // returns object with keys: pb95, pb98, diesel, lpg (values float or null)
   const result = { pb95: null, pb98: null, diesel: null, lpg: null };
   for (const r of rows) {
     if (!r || r.length === 0) continue;
     const text = r.join(' ').toLowerCase();
-    // find any numeric token like 6,57 or 6.57 or 6.57 zł
+    // find price token
     const priceMatch = r.find(cell => /(\d{1,2}[.,]\d{2})/.test(cell));
     const rawPrice = priceMatch ? priceMatch.match(/(\d{1,2}[.,]\d{2})/)[0].replace(',', '.') : null;
     const price = rawPrice ? parseFloat(rawPrice) : null;
@@ -30,7 +27,6 @@ function parseTableRowsToPrices(rows) {
     else if (/98|pb98|benzyna 98/.test(text) && price !== null) result.pb98 = price;
     else if (/diesel|olej napędowy|on/.test(text) && price !== null) result.diesel = price;
     else if (/lpg|autogaz/.test(text) && price !== null) result.lpg = price;
-    // fallback: sometimes name appears in first column and price in second
     else if (r.length >= 2) {
       const name = r[0].toLowerCase();
       const maybePrice = r[1].replace(',', '.').replace(/[^\d.]/g,'');
@@ -47,9 +43,26 @@ function parseTableRowsToPrices(rows) {
 }
 
 async function fetchHtml(url) {
-  const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PriceFetcher/1.0)' } });
+  if (typeof globalThis.fetch !== 'function') {
+    throw new Error('Global fetch not available in this Node. Use Node 18+ or Actions runner.');
+  }
+  const resp = await globalThis.fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PriceFetcher/1.0)' },
+    redirect: 'follow'
+  });
   if (!resp.ok) throw new Error('Fetch failed: ' + resp.status);
   return await resp.text();
+}
+
+function pricesEqual(a = {}, b = {}) {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) {
+    const va = a[k] === null ? null : Number(a[k]);
+    const vb = b[k] === null ? null : Number(b[k]);
+    if ((va === null) !== (vb === null)) return false;
+    if (va !== null && vb !== null && Math.abs(va - vb) > 1e-6) return false;
+  }
+  return true;
 }
 
 async function main() {
@@ -85,23 +98,11 @@ async function main() {
       try { old = JSON.parse(fs.readFileSync(PRICES_FILE, 'utf8')); } catch(e){ old = null; }
     }
 
-    function pricesEqual(a = {}, b = {}) {
-      const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-      for (const k of keys) {
-        const va = a[k] === null ? null : Number(a[k]);
-        const vb = b[k] === null ? null : Number(b[k]);
-        if ((va === null) !== (vb === null)) return false;
-        if (va !== null && vb !== null && Math.abs(va - vb) > 1e-6) return false;
-      }
-      return true;
-    }
-
     if (old && pricesEqual(old.prices, prices)) {
       console.log('Ceny nie zmieniły się — brak zapisu.');
       process.exit(0);
     }
 
-    // save prices.json
     fs.writeFileSync(PRICES_FILE, JSON.stringify(payload, null, 2), 'utf8');
     console.log('Zapisano', PRICES_FILE);
 
@@ -111,7 +112,6 @@ async function main() {
     fs.writeFileSync(backupFile, JSON.stringify(payload, null, 2), 'utf8');
     console.log('Zapisano backup:', backupFile);
 
-    // update history.json
     let history = [];
     if (fs.existsSync(HISTORY_FILE)) {
       try { history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')); } catch(e){ history = []; }
