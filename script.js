@@ -1,5 +1,5 @@
-// script.js - pokazuje wszystkie pozycje z prices.json (nazwy takie jak w tabeli)
-// przechowuje osobne marże per pozycja (localStorage: margin:<encodeURIComponent(name)>)
+// script.js - poprawione pobieranie plików względem bieżącej strony (document.baseURI)
+// pokazuje wszystkie pozycje z prices.json i obsługuje marże per pozycja (localStorage)
 
 const VAT = 1.23;
 
@@ -7,24 +7,36 @@ function marginKeyFor(name){ return 'margin:' + encodeURIComponent(name); }
 function getMargin(name){ const v = localStorage.getItem(marginKeyFor(name)); return v === null ? 0 : parseInt(v,10) || 0; }
 function setMargin(name, grosze){ localStorage.setItem(marginKeyFor(name), String(grosze)); }
 
-function formatZl(v){ if(v === null || v === undefined) return 'brak'; return Number(v).toFixed(3).replace('.',','); } // 3 decimals for accuracy
+function formatZl(v){ if(v === null || v === undefined) return 'brak'; return Number(v).toFixed(3).replace('.',','); } // 3 decimals
+
+// SAFE fetch relative to current page (works for GitHub Pages project sites)
+function fetchJsonRelative(name){
+  const url = new URL(name, document.baseURI).href;
+  return fetch(url, { cache: 'no-cache' });
+}
 
 async function loadAndRender(){
   const meta = document.getElementById('meta');
   const list = document.getElementById('list');
   try{
-    const res = await fetch('/prices.json', { cache: 'no-cache' });
-    if(!res.ok){ meta.innerText = 'Brak prices.json — poczekaj na Action.'; list.innerText = ''; return; }
+    // use relative fetch
+    const res = await fetchJsonRelative('prices.json');
+    if(!res.ok){
+      meta.innerText = 'Brak prices.json — poczekaj na Action lub sprawdź logi.';
+      list.innerText = '';
+      return;
+    }
     const data = await res.json();
     const prices = data.prices || {};
     meta.innerText = `Źródło: ${data.source || '—'} · pobrano: ${new Date(data.fetched_at || Date.now()).toLocaleString()}`;
 
-    // clear list
     list.innerHTML = '';
     const keys = Object.keys(prices);
-    if(keys.length === 0){ list.innerText = 'Brak pozycji w prices.json'; return; }
+    if(keys.length === 0){
+      list.innerText = 'Brak pozycji w prices.json';
+      return;
+    }
 
-    // render each position in same order as keys
     for(const name of keys){
       const entry = prices[name] || {};
       // compute gross if missing
@@ -32,7 +44,7 @@ async function loadAndRender(){
       let per = (typeof entry.per_liter === 'number') ? entry.per_liter : null;
       if(per === null && entry.raw !== undefined && entry.raw !== null) per = Number(entry.raw) / 1000.0;
       if(gross === null && per !== null) gross = per * VAT;
-      // build DOM
+
       const item = document.createElement('div'); item.className = 'item';
       const left = document.createElement('div'); left.className = 'left';
       const lbl = document.createElement('div'); lbl.className = 'label'; lbl.innerText = name;
@@ -47,11 +59,9 @@ async function loadAndRender(){
       const saveBtn = document.createElement('button'); saveBtn.innerText = 'Zapisz';
       const resetBtn = document.createElement('button'); resetBtn.innerText = 'Reset';
 
-      // click handlers
       saveBtn.onclick = ()=>{
         const v = parseInt(input.value||'0',10) || 0;
         setMargin(name, v);
-        // update display
         const adjusted = (gross === null) ? null : (gross + v/100.0);
         priceLine.innerText = 'Brutto / L: ' + (adjusted === null ? 'brak' : formatZl(adjusted) + ' zł');
       };
@@ -62,7 +72,6 @@ async function loadAndRender(){
         priceLine.innerText = 'Brutto / L: ' + (adjusted === null ? 'brak' : formatZl(adjusted) + ' zł');
       };
 
-      // live preview on input
       input.addEventListener('input', ()=>{
         const v = parseInt(input.value||'0',10) || 0;
         const adjusted = (gross === null) ? null : (gross + v/100.0);
@@ -78,7 +87,7 @@ async function loadAndRender(){
       list.appendChild(item);
     }
 
-    // draw chart for first available key present in history.json (if any)
+    // draw chart for first available key in history
     drawChartFromHistory();
 
   }catch(err){
@@ -92,12 +101,11 @@ async function drawChartFromHistory(){
   const ch = document.getElementById('chart');
   ch.innerText = 'Ładowanie wykresu…';
   try{
-    const res = await fetch('/history.json', { cache: 'no-cache' });
+    const res = await fetchJsonRelative('history.json');
     if(!res.ok){ ch.innerText = 'Brak historii.'; return; }
     const hist = await res.json();
     if(!Array.isArray(hist) || hist.length === 0){ ch.innerText = 'Brak historii.'; return; }
 
-    // choose first key available in first history entry
     const first = hist[0].prices || {};
     const keys = Object.keys(first);
     if(keys.length === 0){ ch.innerText = 'Brak danych historycznych.'; return; }
@@ -106,7 +114,8 @@ async function drawChartFromHistory(){
     const points = hist.map(h => {
       const p = h.prices && h.prices[chosenKey];
       if(!p) return { t: new Date(h.fetched_at), v: null };
-      const gross = (typeof p.gross === 'number') ? p.gross : ((p.per_liter? p.per_liter * VAT : (p.raw? p.raw/1000.0*VAT : null)));
+      const gross = (typeof p.gross === 'number') ? p.gross
+                    : ((p.per_liter? p.per_liter * VAT : (p.raw? p.raw/1000.0*VAT : null)));
       return { t: new Date(h.fetched_at), v: gross };
     });
 
@@ -135,5 +144,4 @@ async function drawChartFromHistory(){
   }
 }
 
-// init
 document.addEventListener('DOMContentLoaded', ()=> loadAndRender());
