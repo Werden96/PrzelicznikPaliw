@@ -1,4 +1,4 @@
-name: Update Lotos Prices
+name: Update Lotos Prices (minimal)
 
 on:
   schedule:
@@ -9,23 +9,21 @@ jobs:
   update-prices:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: true
 
-      - name: Setup Node.js 18
+      - name: Setup Node 18
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Run scraper
+      - name: Run scraper (no dependencies)
         id: run_scraper
         run: |
           set -e
+          node -v
           node fetch_and_parse.js
 
       - name: Show git status
