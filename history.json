@@ -47,5 +47,34 @@
         "gross": null
       }
     }
+  },
+  {
+    "source": "https://spot.lotosspv1.pl/2/hurtowe_ceny_paliw",
+    "fetched_at": "2025-11-26T23:05:54.331Z",
+    "prices": {
+      "benzyna": {
+        "raw": 4897,
+        "per_liter": 4.897,
+        "gross": 6.02331
+      },
+      "on": {
+        "raw": 5184,
+        "per_liter": 5.184,
+        "gross": 6.37632
+      },
+      "op": {
+        "raw": 3293,
+        "per_liter": 3.293,
+        "gross": 4.05039
+      },
+      "pb95": 95,
+      "pb98": 98,
+      "diesel": 4.907,
+      "lpg": {
+        "raw": null,
+        "per_liter": null,
+        "gross": null
+      }
+    }
   }
 ]
