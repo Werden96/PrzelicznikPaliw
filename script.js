@@ -1,6 +1,4 @@
-// script.js - poprawione pobieranie plików względem bieżącej strony (document.baseURI)
-// pokazuje wszystkie pozycje z prices.json i obsługuje marże per pozycja (localStorage)
-
+// script.js - show only table names (skip short keys when full names exist), fetch relative to page
 const VAT = 1.23;
 
 function marginKeyFor(name){ return 'margin:' + encodeURIComponent(name); }
@@ -9,35 +7,78 @@ function setMargin(name, grosze){ localStorage.setItem(marginKeyFor(name), Strin
 
 function formatZl(v){ if(v === null || v === undefined) return 'brak'; return Number(v).toFixed(3).replace('.',','); } // 3 decimals
 
-// SAFE fetch relative to current page (works for GitHub Pages project sites)
 function fetchJsonRelative(name){
   const url = new URL(name, document.baseURI).href;
   return fetch(url, { cache: 'no-cache' });
+}
+
+// detect short code corresponding to a full name (returns 'pb95','pb98','diesel','lpg' or null)
+function shortKeyFromFullName(nameLower){
+  if(nameLower.includes('95')) return 'pb95';
+  if(nameLower.includes('98')) return 'pb98';
+  if(/olej napędowy|eurodiesel|diesel|olej-napędowy|olejnapędowy|on/.test(nameLower)) {
+    // prefer diesel unless text explicitly about opał which we won't map here
+    if(/opał|opal|op|do celów opałowych|opalowy/.test(nameLower)) return 'op';
+    return 'diesel';
+  }
+  if(nameLower.includes('lpg') || nameLower.includes('autogaz')) return 'lpg';
+  return null;
+}
+
+// helper: should skip header-like keys
+function isHeaderKey(k){
+  if(!k) return false;
+  const s = String(k).trim().toLowerCase();
+  return s === 'paliwo' || s === 'cena' || s === 'produkt' || s === '';
 }
 
 async function loadAndRender(){
   const meta = document.getElementById('meta');
   const list = document.getElementById('list');
   try{
-    // use relative fetch
     const res = await fetchJsonRelative('prices.json');
     if(!res.ok){
-      meta.innerText = 'Brak prices.json — poczekaj na Action lub sprawdź logi.';
-      list.innerText = '';
+      meta && (meta.innerText = 'Brak prices.json — poczekaj na Action lub sprawdź logi.');
+      list && (list.innerText = '');
       return;
     }
     const data = await res.json();
     const prices = data.prices || {};
-    meta.innerText = `Źródło: ${data.source || '—'} · pobrano: ${new Date(data.fetched_at || Date.now()).toLocaleString()}`;
+    meta && (meta.innerText = `Źródło: ${data.source || '—'} · pobrano: ${new Date(data.fetched_at || Date.now()).toLocaleString()}`);
 
-    list.innerHTML = '';
+    // determine which short keys have corresponding full-name entries
     const keys = Object.keys(prices);
-    if(keys.length === 0){
-      list.innerText = 'Brak pozycji w prices.json';
+    const fullNameKeys = keys.filter(k => /\s/.test(k)); // keys that contain space -> likely full names
+    const presentShortsFromFull = new Set();
+    for(const fn of fullNameKeys){
+      const sk = shortKeyFromFullName(fn.toLowerCase());
+      if(sk) presentShortsFromFull.add(sk);
+    }
+
+    // build list of keys to render: preserve order from prices object,
+    // skip header-like keys, and skip short keys if corresponding full exists
+    const keysToRender = [];
+    for(const k of keys){
+      if(isHeaderKey(k)) continue;
+      const kl = k.toLowerCase();
+      // detect if this is a short key like pb95/pb98/diesel/lpg/op (common)
+      const isShort = /^(pb95|pb98|diesel|lpg|op|on)$/i.test(kl);
+      if(isShort){
+        // if there exists a full name mapping for this short key, skip it
+        if(presentShortsFromFull.has(kl)) continue;
+      }
+      // Also skip keys that are exact duplicates of full names already included (avoid duplicates)
+      keysToRender.push(k);
+    }
+
+    // render
+    list.innerHTML = '';
+    if(keysToRender.length === 0){
+      list.innerText = 'Brak pozycji do wyświetlenia w prices.json';
       return;
     }
 
-    for(const name of keys){
+    for(const name of keysToRender){
       const entry = prices[name] || {};
       // compute gross if missing
       let gross = (typeof entry.gross === 'number') ? entry.gross : null;
@@ -87,13 +128,13 @@ async function loadAndRender(){
       list.appendChild(item);
     }
 
-    // draw chart for first available key in history
+    // chart for first available key in history
     drawChartFromHistory();
 
   }catch(err){
     console.error('Load error', err);
-    document.getElementById('meta').innerText = 'Błąd pobierania danych (sprawdź konsolę).';
-    document.getElementById('list').innerText = '';
+    if(document.getElementById('meta')) document.getElementById('meta').innerText = 'Błąd pobierania danych (sprawdź konsolę).';
+    if(document.getElementById('list')) document.getElementById('list').innerText = '';
   }
 }
 
