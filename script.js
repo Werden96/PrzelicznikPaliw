@@ -1,34 +1,15 @@
-// script.js - show only table names (skip short keys when full names exist), fetch relative to page
+// script.js - fetch relative, show scraped keys (names), per-item margins via localStorage
 const VAT = 1.23;
 
 function marginKeyFor(name){ return 'margin:' + encodeURIComponent(name); }
 function getMargin(name){ const v = localStorage.getItem(marginKeyFor(name)); return v === null ? 0 : parseInt(v,10) || 0; }
 function setMargin(name, grosze){ localStorage.setItem(marginKeyFor(name), String(grosze)); }
 
-function formatZl(v){ if(v === null || v === undefined) return 'brak'; return Number(v).toFixed(3).replace('.',','); } // 3 decimals
+function formatZl(v){ if(v === null || v === undefined) return 'brak'; return Number(v).toFixed(3).replace('.',','); }
 
 function fetchJsonRelative(name){
   const url = new URL(name, document.baseURI).href;
   return fetch(url, { cache: 'no-cache' });
-}
-
-// detect short code corresponding to a full name (returns 'pb95','pb98','diesel','lpg' or null)
-function shortKeyFromFullName(nameLower){
-  if(nameLower.includes('95')) return 'pb95';
-  if(nameLower.includes('98')) return 'pb98';
-  if(/olej napędowy|eurodiesel|diesel|olej-napędowy|olejnapędowy|on/.test(nameLower)) {
-    if(/opał|opal|op|do celów opałowych|opalowy/.test(nameLower)) return 'op';
-    return 'diesel';
-  }
-  if(nameLower.includes('lpg') || nameLower.includes('autogaz')) return 'lpg';
-  return null;
-}
-
-// helper: should skip header-like keys
-function isHeaderKey(k){
-  if(!k) return false;
-  const s = String(k).trim().toLowerCase();
-  return s === 'paliwo' || s === 'cena' || s === 'produkt' || s === '';
 }
 
 async function loadAndRender(){
@@ -45,38 +26,15 @@ async function loadAndRender(){
     const prices = data.prices || {};
     meta && (meta.innerText = `Źródło: ${data.source || '—'} · pobrano: ${new Date(data.fetched_at || Date.now()).toLocaleString()}`);
 
-    // determine which short keys have corresponding full-name entries
-    const keys = Object.keys(prices);
-    const fullNameKeys = keys.filter(k => /\s/.test(k)); // keys that contain space -> likely full names
-    const presentShortsFromFull = new Set();
-    for(const fn of fullNameKeys){
-      const sk = shortKeyFromFullName(fn.toLowerCase());
-      if(sk) presentShortsFromFull.add(sk);
-    }
-
-    // build list of keys to render: preserve order from prices object,
-    // skip header-like keys, and skip short keys if corresponding full exists
-    const keysToRender = [];
-    for(const k of keys){
-      if(isHeaderKey(k)) continue;
-      const kl = k.toLowerCase();
-      const isShort = /^(pb95|pb98|diesel|lpg|op|on)$/i.test(kl);
-      if(isShort){
-        if(presentShortsFromFull.has(kl)) continue;
-      }
-      keysToRender.push(k);
-    }
-
-    // render
     list.innerHTML = '';
-    if(keysToRender.length === 0){
-      list.innerText = 'Brak pozycji do wyświetlenia w prices.json';
+    const keys = Object.keys(prices);
+    if(keys.length === 0){
+      list.innerText = 'Brak pozycji w prices.json';
       return;
     }
 
-    for(const name of keysToRender){
+    for(const name of keys){
       const entry = prices[name] || {};
-      // compute gross if missing
       let gross = (typeof entry.gross === 'number') ? entry.gross : null;
       let per = (typeof entry.per_liter === 'number') ? entry.per_liter : null;
       if(per === null && entry.raw !== undefined && entry.raw !== null) per = Number(entry.raw) / 1000.0;
@@ -124,7 +82,6 @@ async function loadAndRender(){
       list.appendChild(item);
     }
 
-    // chart for first available key in history
     drawChartFromHistory();
 
   }catch(err){
