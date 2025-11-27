@@ -17,7 +17,6 @@ function shortKeyFromFullName(nameLower){
   if(nameLower.includes('95')) return 'pb95';
   if(nameLower.includes('98')) return 'pb98';
   if(/olej napędowy|eurodiesel|diesel|olej-napędowy|olejnapędowy|on/.test(nameLower)) {
-    // prefer diesel unless text explicitly about opał which we won't map here
     if(/opał|opal|op|do celów opałowych|opalowy/.test(nameLower)) return 'op';
     return 'diesel';
   }
@@ -61,13 +60,10 @@ async function loadAndRender(){
     for(const k of keys){
       if(isHeaderKey(k)) continue;
       const kl = k.toLowerCase();
-      // detect if this is a short key like pb95/pb98/diesel/lpg/op (common)
       const isShort = /^(pb95|pb98|diesel|lpg|op|on)$/i.test(kl);
       if(isShort){
-        // if there exists a full name mapping for this short key, skip it
         if(presentShortsFromFull.has(kl)) continue;
       }
-      // Also skip keys that are exact duplicates of full names already included (avoid duplicates)
       keysToRender.push(k);
     }
 
@@ -183,6 +179,12 @@ async function drawChartFromHistory(){
     console.error('Chart error', e);
     ch.innerText = 'Błąd wykresu.';
   }
+}
+
+// utility used above
+function fetchJsonRelative(name){
+  const url = new URL(name, document.baseURI).href;
+  return fetch(url, { cache: 'no-cache' });
 }
 
 document.addEventListener('DOMContentLoaded', ()=> loadAndRender());
