@@ -1,4 +1,4 @@
-// fetch_and_parse.js - zapisuje dokładne nazwy paliw z tabeli jako klucze w prices.json
+// fetch_and_parse.js - zapisuje tylko bieżące nazwy z tabeli (NO MERGE)
 const fs = require('fs');
 const path = require('path');
 
@@ -38,29 +38,33 @@ function parseTableRows(tableHtml){
 
 function parseNumericFromCell(cell){
   if(!cell) return null;
-  let cleaned = String(cell).replace(/[^\d,.\s]/g,'').trim(); // keep digits, dot, comma, space
+  let cleaned = String(cell).replace(/[^\d,.\s]/g,'').trim();
   if(!cleaned) return null;
-  cleaned = cleaned.replace(/\s+/g,'').replace(/,/g,'.'); // "4 448,00" -> "4448.00"
+  cleaned = cleaned.replace(/\s+/g,'').replace(/,/g,'.');
   const n = parseFloat(cleaned);
   return isNaN(n) ? null : n;
 }
 
-// Build mapping: key = original name string, value = { raw: number (PLN / 1000L), per_liter, gross }
+function isHeaderLike(name){
+  if(!name) return false;
+  const s = String(name).trim().toLowerCase();
+  return s === 'paliwo' || s === 'cena' || s === 'produkt' || s === '';
+}
+
 function rowsToPrices(rows){
   const out = {};
   for(const r of rows){
-    // we expect at least two columns: [name, price]
     if(r.length < 2) continue;
     const name = r[0].trim();
+    if(isHeaderLike(name)) continue;
     const rawVal = parseNumericFromCell(r[1]);
-    if(rawVal === null) {
-      // if price cell empty or unparsable, skip but keep key with null values
+    if(rawVal === null){
       out[name] = { raw: null, per_liter: null, gross: null };
       continue;
     }
-    const rawRounded = Math.round(rawVal * 100) / 100; // keep 2 decimals
+    const rawRounded = Math.round(rawVal * 100) / 100;
     const per_liter = rawRounded / 1000.0;
-    const gross = Math.round(per_liter * VAT * 100000) / 100000; // 5 decimals
+    const gross = Math.round(per_liter * VAT * 100000) / 100000;
     out[name] = { raw: rawRounded, per_liter: per_liter, gross: gross };
   }
   return out;
@@ -72,6 +76,10 @@ async function fetchHtml(url){
   if(!res.ok) throw new Error('Fetch failed: ' + res.status);
   return await res.text();
 }
+
+(function safeWriteSync(file, data){
+  try { fs.writeFileSync(file, data, 'utf8'); return true; } catch(e) { console.error('Write error', e); return false; }
+});
 
 (async function main(){
   try{
@@ -87,49 +95,25 @@ async function fetchHtml(url){
     console.log('Znaleziono wierszy:', rows.length);
 
     const scraped = rowsToPrices(rows);
-    console.log('Scraped entries:', Object.keys(scraped).length);
+    const scrapedKeys = Object.keys(scraped);
+    console.log('Sparsowane klucze:', scrapedKeys);
 
-    // read old
-    let old = null;
-    if(fs.existsSync(PRICES_FILE)){
-      try{ old = JSON.parse(fs.readFileSync(PRICES_FILE,'utf8')); } catch(e){ old = null; }
-    }
-
-    // Build final: keep any old keys too, but prefer scraped values for keys that exist
-    const keys = new Set([...(old && old.prices ? Object.keys(old.prices) : []), ...Object.keys(scraped)]);
-    const final = {};
-    for(const k of keys){
-      if(scraped.hasOwnProperty(k)) final[k] = scraped[k];
-      else if(old && old.prices && old.prices[k]) final[k] = old.prices[k];
-      else final[k] = { raw: null, per_liter: null, gross: null };
-    }
-
-    const payload = { source: SOURCE_URL, fetched_at: new Date().toISOString(), prices: final };
-
-    // compare by gross per key
-    function pricesEqual(a={}, b={}){
-      const ks = new Set([...Object.keys(a||{}), ...Object.keys(b||{})]);
-      for(const k of ks){
-        const ga = a[k] && typeof a[k].gross === 'number' ? a[k].gross : null;
-        const gb = b[k] && typeof b[k].gross === 'number' ? b[k].gross : null;
-        if((ga === null) !== (gb === null)) return false;
-        if(ga !== null && gb !== null && Math.abs(ga - gb) > 1e-6) return false;
-      }
-      return true;
-    }
-
-    if(old && pricesEqual(old.prices, final)){
-      console.log('Ceny bez zmian — brak zapisu.');
+    if(scrapedKeys.length === 0){
+      console.log('Brak sensownych wpisów w tabeli — nie nadpisuję prices.json (safe mode).');
       process.exit(0);
     }
 
-    fs.writeFileSync(PRICES_FILE, JSON.stringify(payload, null, 2), 'utf8');
+    // payload contains ONLY scraped keys (no merge)
+    const payload = { source: SOURCE_URL, fetched_at: new Date().toISOString(), prices: {} };
+    for(const k of scrapedKeys) payload.prices[k] = scraped[k];
+
+    safeWriteSync(PRICES_FILE, JSON.stringify(payload, null, 2));
     console.log('Zapisano', PRICES_FILE);
 
     ensureDir(HISTORY_DIR);
     const tsSafe = new Date().toISOString().replace(/[:.]/g,'-');
     const backupFile = path.join(HISTORY_DIR, `prices-${tsSafe}.json`);
-    fs.writeFileSync(backupFile, JSON.stringify(payload, null, 2), 'utf8');
+    safeWriteSync(backupFile, JSON.stringify(payload, null, 2));
     console.log('Zapisano backup:', backupFile);
 
     let history = [];
@@ -138,7 +122,7 @@ async function fetchHtml(url){
     }
     history.push(payload);
     if(history.length > MAX_HISTORY_ENTRIES) history = history.slice(history.length - MAX_HISTORY_ENTRIES);
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
+    safeWriteSync(HISTORY_FILE, JSON.stringify(history, null, 2));
     console.log('Zaktualizowano', HISTORY_FILE, 'entries:', history.length);
 
     process.exit(0);
