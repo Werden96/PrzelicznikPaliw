@@ -1,4 +1,4 @@
-name: Update Lotos Prices (with PAT)
+name: Update Lotos Prices (with PAT - fixed)
 
 on:
   workflow_dispatch:
@@ -9,11 +9,11 @@ jobs:
   update-prices:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout with PAT
+      - name: Checkout (with PAT, keep credentials)
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.ACTIONS_PAT }}
-          persist-credentials: false
+          token: ${{ secrets.ACTIONS_PAT }}       # Twój PAT secret
+          persist-credentials: true               # ważne — zostawia token w git config, by push działał
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -32,4 +32,4 @@ jobs:
           add: |
             prices.json
             history/*.json
-          token: ${{ secrets.ACTIONS_PAT }}
+          github_token: ${{ secrets.ACTIONS_PAT }}   # <-- poprawna nazwa inputu dla tej akcji
