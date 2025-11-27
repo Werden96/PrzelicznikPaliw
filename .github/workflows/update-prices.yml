@@ -1,17 +1,20 @@
-name: Update Lotos Prices
+name: Update Lotos Prices (with PAT)
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 7 * * *' # dostosuj jeśli chcesz
+    - cron: '0 7 * * *' # codziennie o 07:00 UTC, zmień jeśli chcesz
 
 jobs:
   update-prices:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout (with PAT)
         uses: actions/checkout@v4
         with:
-          persist-credentials: true
+          # use the PAT for checkout so subsequent pushes use same credential
+          token: ${{ secrets.ACTIONS_PAT }}
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -19,13 +22,15 @@ jobs:
           node-version: '18'
 
       - name: Run scraper
-        run: |
-          node fetch_and_parse.js
+        run: node fetch_and_parse.js
 
-      - name: Commit changes
-        uses: stefanzweifel/git-auto-commit-action@v4
+      - name: Commit & push changes (using PAT)
+        uses: EndBug/add-and-commit@v9
         with:
-          commit_message: 'Update prices.json & history'
-          file_pattern: |
+          author_name: 'github-actions[bot]'
+          author_email: '41898282+github-actions[bot]@users.noreply.github.com'
+          message: 'Update prices.json & history'
+          add: |
             prices.json
             history/*.json
+          token: ${{ secrets.ACTIONS_PAT }}
