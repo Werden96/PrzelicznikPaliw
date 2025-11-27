@@ -1,20 +1,38 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pl">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Przelicznik Paliw</title>
-    <link rel="stylesheet" href="style.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Przelicznik Hurtowych Cen Paliw — wszystkie pozycje</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body{font-family:Inter,system-ui,Arial,sans-serif;background:#f7f9fc;margin:0;padding:12px;display:flex;justify-content:center}
+    main{width:100%;max-width:920px;background:#fff;padding:18px;border-radius:10px;box-shadow:0 6px 20px rgba(10,20,40,0.06)}
+    h1{font-size:18px;margin:0 0 12px}
+    .list{display:flex;flex-direction:column;gap:8px}
+    .item{display:flex;justify-content:space-between;align-items:center;padding:12px;border-radius:8px;background:#fbfbfd}
+    .item .left{max-width:60%}
+    .label{font-weight:600}
+    .price{font-size:16px}
+    .controls{display:flex;gap:8px;align-items:center}
+    .controls input{width:90px;padding:6px;border-radius:6px;border:1px solid #ddd}
+    .controls button{padding:6px 10px;border-radius:6px;border:0;background:#0b69ff;color:#fff}
+    .small{color:#666;font-size:13px}
+    @media(max-width:600px){ .item{flex-direction:column;align-items:flex-start} .controls{margin-top:8px} .left{width:100%} }
+  </style>
 </head>
 <body>
+  <main>
+    <h1>Hurtowe ceny — wszystkie pozycje (brutto / L)</h1>
+    <div id="meta" class="small">Ładowanie…</div>
+    <div id="list" class="list" style="margin-top:12px">Ładowanie danych…</div>
 
-    <h1>Przelicznik paliw – ceny brutto za litr</h1>
+    <section style="margin-top:18px">
+      <h2 style="font-size:14px;margin:0 0 8px">Historia (pierwsza pozycja)</h2>
+      <div id="chart" style="background:#fff;border-radius:8px;padding:10px;box-shadow:0 2px 8px rgba(10,20,40,.04)">Ładowanie wykresu…</div>
+    </section>
+  </main>
 
-    <div id="prices-container"></div>
-
-    <h2>Wykres zmian ceny (pierwszy produkt z historii)</h2>
-    <div id="chart" style="width:100%; height:300px; border:1px solid #ddd; border-radius:6px;"></div>
-
-    <script src="script.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
