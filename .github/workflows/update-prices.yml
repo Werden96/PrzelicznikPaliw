@@ -2,7 +2,8 @@ name: Update Lotos Prices
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 7 * * *' # codziennie o 07:00 UTC (dostosuj)
+    - cron: '0 7 * * *' # dostosuj jeśli chcesz
+
 jobs:
   update-prices:
     runs-on: ubuntu-latest
