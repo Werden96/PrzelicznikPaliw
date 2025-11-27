@@ -1,136 +1,184 @@
+// script.js - show only table names (skip short keys when full names exist), fetch relative to page
 const VAT = 1.23;
 
-// pomocnicze
-function getMarginKey(name) {
-    return "margin:" + encodeURIComponent(name);
-}
-function getMargin(name) {
-    const v = localStorage.getItem(getMarginKey(name));
-    return v ? parseFloat(v) : 0;
-}
-function setMargin(name, value) {
-    localStorage.setItem(getMarginKey(name), value);
-}
+function marginKeyFor(name){ return 'margin:' + encodeURIComponent(name); }
+function getMargin(name){ const v = localStorage.getItem(marginKeyFor(name)); return v === null ? 0 : parseInt(v,10) || 0; }
+function setMargin(name, grosze){ localStorage.setItem(marginKeyFor(name), String(grosze)); }
 
-// formatowanie
-function formatPrice(v) {
-    if (v === null || v === undefined) return 'brak';
-    return v.toFixed(3).replace('.', ',') + " zł";
+function formatZl(v){ if(v === null || v === undefined) return 'brak'; return Number(v).toFixed(3).replace('.',','); } // 3 decimals
+
+function fetchJsonRelative(name){
+  const url = new URL(name, document.baseURI).href;
+  return fetch(url, { cache: 'no-cache' });
 }
 
-// ładowanie JSON
-async function loadJSON(url) {
-    const res = await fetch(url + "?t=" + Date.now());
-    if (!res.ok) throw new Error("Błąd pobierania " + url);
-    return await res.json();
+// detect short code corresponding to a full name (returns 'pb95','pb98','diesel','lpg' or null)
+function shortKeyFromFullName(nameLower){
+  if(nameLower.includes('95')) return 'pb95';
+  if(nameLower.includes('98')) return 'pb98';
+  if(/olej napędowy|eurodiesel|diesel|olej-napędowy|olejnapędowy|on/.test(nameLower)) {
+    if(/opał|opal|op|do celów opałowych|opalowy/.test(nameLower)) return 'op';
+    return 'diesel';
+  }
+  if(nameLower.includes('lpg') || nameLower.includes('autogaz')) return 'lpg';
+  return null;
 }
 
-// render listy produktów
-function renderList(prices) {
-    const container = document.getElementById("prices-container");
-    container.innerHTML = "";
+// helper: should skip header-like keys
+function isHeaderKey(k){
+  if(!k) return false;
+  const s = String(k).trim().toLowerCase();
+  return s === 'paliwo' || s === 'cena' || s === 'produkt' || s === '';
+}
 
-    for (const name of Object.keys(prices)) {
-        const item = prices[name];
-        const perLiterNetto = item.raw ? (item.raw / 1000) : null;
-        const perLiterBrutto = perLiterNetto ? perLiterNetto * VAT : null;
-
-        const margin = getMargin(name);
-        const finalPrice = perLiterBrutto ? perLiterBrutto + margin / 100 : null;
-
-        const div = document.createElement("div");
-        div.className = "product-box";
-
-        div.innerHTML = `
-            <h3>${name}</h3>
-            <p>Netto / litr: <strong>${perLiterNetto ? formatPrice(perLiterNetto) : "brak"}</strong></p>
-            <p>Brutto / litr: <strong>${perLiterBrutto ? formatPrice(perLiterBrutto) : "brak"}</strong></p>
-
-            <label>Marża (gr): <input type="number" value="${margin}" class="marza-input"></label>
-
-            <p>Cena końcowa: <strong>${finalPrice ? formatPrice(finalPrice) : "brak"}</strong></p>
-        `;
-
-        const input = div.querySelector(".marza-input");
-        input.addEventListener("change", () => {
-            setMargin(name, parseFloat(input.value || "0"));
-            renderList(prices);
-        });
-
-        container.appendChild(div);
+async function loadAndRender(){
+  const meta = document.getElementById('meta');
+  const list = document.getElementById('list');
+  try{
+    const res = await fetchJsonRelative('prices.json');
+    if(!res.ok){
+      meta && (meta.innerText = 'Brak prices.json — poczekaj na Action lub sprawdź logi.');
+      list && (list.innerText = '');
+      return;
     }
-}
+    const data = await res.json();
+    const prices = data.prices || {};
+    meta && (meta.innerText = `Źródło: ${data.source || '—'} · pobrano: ${new Date(data.fetched_at || Date.now()).toLocaleString()}`);
 
-// prosty wykres z history.json
-function renderChart(history) {
-    const chart = document.getElementById("chart");
-    chart.innerHTML = "";
-
-    if (!history || !Array.isArray(history) || history.length === 0) {
-        chart.innerText = "Brak danych historycznych.";
-        return;
+    // determine which short keys have corresponding full-name entries
+    const keys = Object.keys(prices);
+    const fullNameKeys = keys.filter(k => /\s/.test(k)); // keys that contain space -> likely full names
+    const presentShortsFromFull = new Set();
+    for(const fn of fullNameKeys){
+      const sk = shortKeyFromFullName(fn.toLowerCase());
+      if(sk) presentShortsFromFull.add(sk);
     }
 
-    const first = history[history.length - 1].prices;
-    const productName = Object.keys(first)[0];
-    if (!productName) {
-        chart.innerText = "Brak produktów w historii.";
-        return;
+    // build list of keys to render: preserve order from prices object,
+    // skip header-like keys, and skip short keys if corresponding full exists
+    const keysToRender = [];
+    for(const k of keys){
+      if(isHeaderKey(k)) continue;
+      const kl = k.toLowerCase();
+      const isShort = /^(pb95|pb98|diesel|lpg|op|on)$/i.test(kl);
+      if(isShort){
+        if(presentShortsFromFull.has(kl)) continue;
+      }
+      keysToRender.push(k);
     }
 
-    const points = history
-        .map(h => ({
-            t: new Date(h.fetched_at),
-            v: h.prices[productName]?.gross || null
-        }))
-        .filter(p => p.v !== null);
-
-    if (points.length < 2) {
-        chart.innerText = "Za mało danych do wykresu.";
-        return;
+    // render
+    list.innerHTML = '';
+    if(keysToRender.length === 0){
+      list.innerText = 'Brak pozycji do wyświetlenia w prices.json';
+      return;
     }
 
-    // rysowanie (minimalistyczne)
-    const w = chart.clientWidth;
-    const h = chart.clientHeight;
+    for(const name of keysToRender){
+      const entry = prices[name] || {};
+      // compute gross if missing
+      let gross = (typeof entry.gross === 'number') ? entry.gross : null;
+      let per = (typeof entry.per_liter === 'number') ? entry.per_liter : null;
+      if(per === null && entry.raw !== undefined && entry.raw !== null) per = Number(entry.raw) / 1000.0;
+      if(gross === null && per !== null) gross = per * VAT;
 
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("width", w);
-    svg.setAttribute("height", h);
-    svg.style.display = "block";
+      const item = document.createElement('div'); item.className = 'item';
+      const left = document.createElement('div'); left.className = 'left';
+      const lbl = document.createElement('div'); lbl.className = 'label'; lbl.innerText = name;
+      const priceLine = document.createElement('div'); priceLine.className = 'price small';
+      priceLine.innerText = 'Brutto / L: ' + (gross === null ? 'brak' : formatZl(gross) + ' zł');
+      left.appendChild(lbl); left.appendChild(priceLine);
 
-    const minV = Math.min(...points.map(p => p.v));
-    const maxV = Math.max(...points.map(p => p.v));
+      const controls = document.createElement('div'); controls.className = 'controls';
+      const input = document.createElement('input'); input.type = 'number'; input.step = '1';
+      input.value = String(getMargin(name));
+      input.title = 'Marża w groszach';
+      const saveBtn = document.createElement('button'); saveBtn.innerText = 'Zapisz';
+      const resetBtn = document.createElement('button'); resetBtn.innerText = 'Reset';
 
-    const path = points.map((p, i) => {
-        const x = (i / (points.length - 1)) * (w - 20) + 10;
-        const y = h - ((p.v - minV) / (maxV - minV)) * (h - 20) - 10;
-        return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-    }).join(" ");
+      saveBtn.onclick = ()=>{
+        const v = parseInt(input.value||'0',10) || 0;
+        setMargin(name, v);
+        const adjusted = (gross === null) ? null : (gross + v/100.0);
+        priceLine.innerText = 'Brutto / L: ' + (adjusted === null ? 'brak' : formatZl(adjusted) + ' zł');
+      };
+      resetBtn.onclick = ()=>{
+        setMargin(name, 0);
+        input.value = '0';
+        const adjusted = (gross === null) ? null : (gross + 0);
+        priceLine.innerText = 'Brutto / L: ' + (adjusted === null ? 'brak' : formatZl(adjusted) + ' zł');
+      };
 
-    const pth = document.createElementNS(svg.namespaceURI, "path");
-    pth.setAttribute("d", path);
-    pth.setAttribute("fill", "none");
-    pth.setAttribute("stroke", "#0b69ff");
-    pth.setAttribute("stroke-width", "2");
+      input.addEventListener('input', ()=>{
+        const v = parseInt(input.value||'0',10) || 0;
+        const adjusted = (gross === null) ? null : (gross + v/100.0);
+        priceLine.innerText = 'Brutto / L: ' + (adjusted === null ? 'brak' : formatZl(adjusted) + ' zł');
+      });
 
-    svg.appendChild(pth);
-    chart.appendChild(svg);
+      controls.appendChild(input);
+      controls.appendChild(saveBtn);
+      controls.appendChild(resetBtn);
+
+      item.appendChild(left);
+      item.appendChild(controls);
+      list.appendChild(item);
+    }
+
+    // chart for first available key in history
+    drawChartFromHistory();
+
+  }catch(err){
+    console.error('Load error', err);
+    if(document.getElementById('meta')) document.getElementById('meta').innerText = 'Błąd pobierania danych (sprawdź konsolę).';
+    if(document.getElementById('list')) document.getElementById('list').innerText = '';
+  }
 }
 
-// inicjalizacja
-async function init() {
-    try {
-        const pricesData = await loadJSON("prices.json");
-        renderList(pricesData.prices);
+async function drawChartFromHistory(){
+  const ch = document.getElementById('chart');
+  ch.innerText = 'Ładowanie wykresu…';
+  try{
+    const res = await fetchJsonRelative('history.json');
+    if(!res.ok){ ch.innerText = 'Brak historii.'; return; }
+    const hist = await res.json();
+    if(!Array.isArray(hist) || hist.length === 0){ ch.innerText = 'Brak historii.'; return; }
 
-        const history = await loadJSON("history.json");
-        renderChart(history);
+    const first = hist[0].prices || {};
+    const keys = Object.keys(first);
+    if(keys.length === 0){ ch.innerText = 'Brak danych historycznych.'; return; }
+    const chosenKey = keys[0];
 
-    } catch (err) {
-        console.error(err);
-        document.getElementById("prices-container").innerText = "Błąd wczytywania danych.";
-    }
+    const points = hist.map(h => {
+      const p = h.prices && h.prices[chosenKey];
+      if(!p) return { t: new Date(h.fetched_at), v: null };
+      const gross = (typeof p.gross === 'number') ? p.gross
+                    : ((p.per_liter? p.per_liter * VAT : (p.raw? p.raw/1000.0*VAT : null)));
+      return { t: new Date(h.fetched_at), v: gross };
+    });
+
+    const vals = points.map(p=>p.v).filter(v=>v!==null);
+    if(vals.length === 0){ ch.innerText = 'Brak wartości do wykresu.'; return; }
+
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const width = 720, height = 200, pad = 30;
+    const stepX = (width - pad*2) / (points.length -1 || 1);
+    let path = '';
+    points.forEach((pt,i)=>{
+      const x = pad + i*stepX;
+      const y = pt.v === null ? null : pad + ((max - pt.v)/(max - min || 1))*(height - pad*2);
+      if(y === null) return;
+      if(path==='') path += `M ${x} ${y}`; else path += ` L ${x} ${y}`;
+    });
+    const svg = [];
+    svg.push(`<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`);
+    svg.push(`<rect width="100%" height="100%" fill="transparent"/>`);
+    svg.push(`<path d="${path}" fill="none" stroke="#0b69ff" stroke-width="2"/>`);
+    svg.push(`</svg>`);
+    ch.innerHTML = svg.join('');
+  }catch(e){
+    console.error('Chart error', e);
+    ch.innerText = 'Błąd wykresu.';
+  }
 }
 
-document.addEventListener("DOMContentLoaded", init);
+document.addEventListener('DOMContentLoaded', ()=> loadAndRender());
