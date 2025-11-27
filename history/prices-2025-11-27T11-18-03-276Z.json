@@ -1,0 +1,31 @@
+{
+  "source": "https://spot.lotosspv1.pl/2/hurtowe_ceny_paliw",
+  "fetched_at": "2025-11-27T11:18:03.275Z",
+  "prices": {
+    "Benzyna bezołowiowa 95": {
+      "raw": 4423,
+      "per_liter": 4.423,
+      "gross": 5.44029
+    },
+    "Benzyna bezołowiowa 98": {
+      "raw": 4897,
+      "per_liter": 4.897,
+      "gross": 6.02331
+    },
+    "Olej napędowy EURODIESEL": {
+      "raw": 4829,
+      "per_liter": 4.829,
+      "gross": 5.93967
+    },
+    "Olej napędowy I Z-40": {
+      "raw": 5184,
+      "per_liter": 5.184,
+      "gross": 6.37632
+    },
+    "Olej napędowy do celów opałowych aramcoHEATOIL": {
+      "raw": 3293,
+      "per_liter": 3.293,
+      "gross": 4.05039
+    }
+  }
+}
