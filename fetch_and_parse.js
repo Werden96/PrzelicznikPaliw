@@ -1,4 +1,5 @@
 // fetch_and_parse.js - zapisuje tylko bieżące nazwy z tabeli (NO MERGE)
+// Poprawka: poprawna deklaracja safeWriteSync
 const fs = require('fs');
 const path = require('path');
 
@@ -77,9 +78,16 @@ async function fetchHtml(url){
   return await res.text();
 }
 
-(function safeWriteSync(file, data){
-  try { fs.writeFileSync(file, data, 'utf8'); return true; } catch(e) { console.error('Write error', e); return false; }
-});
+// Poprawna deklaracja funkcji safeWriteSync
+function safeWriteSync(file, data){
+  try {
+    fs.writeFileSync(file, data, 'utf8');
+    return true;
+  } catch(e) {
+    console.error('Write error', e);
+    return false;
+  }
+}
 
 (async function main(){
   try{
