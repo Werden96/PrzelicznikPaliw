@@ -1,19 +1,20 @@
-name: Update Lotos Prices (with PAT - fixed)
+name: Update Lotos Prices (every 3 hours, with PAT)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '0 */3 * * *'  # co 3 godziny, od 00:00 UTC
 
 jobs:
   update-prices:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout (with PAT, keep credentials)
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.ACTIONS_PAT }}       # Twój PAT secret
-          persist-credentials: true               # ważne — zostawia token w git config, by push działał
+          token: ${{ secrets.ACTIONS_PAT }}     # <-- Twój PAT
+          persist-credentials: true            # <-- zostawia dane w git config
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -32,4 +33,4 @@ jobs:
           add: |
             prices.json
             history/*.json
-          github_token: ${{ secrets.ACTIONS_PAT }}   # <-- poprawna nazwa inputu dla tej akcji
+          github_token: ${{ secrets.ACTIONS_PAT }}   # <-- poprawny input do EndBug
